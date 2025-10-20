@@ -30,6 +30,8 @@ void loop() {
 }
 
 
+
+//..........................................................................................................................................Button Checking Function
 int buttonCheck() {
   for (int i = 0; i < NUM_BUTTONS; i++) {
     bool currentState = digitalRead(buttonPins[i]);
@@ -72,6 +74,7 @@ int buttonCheck() {
 }
 
 
+//..........................................................................................................................................Button Printing Function
 void printButton(int result){
   // int result = buttonCheck();
   if (result != -1) {
