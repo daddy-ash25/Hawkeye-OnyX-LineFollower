@@ -12,15 +12,45 @@ bool longPressFired[NUM_BUTTONS];
 
 
 
+//..............................................................................................................................Display Variablesa and initialisatiuons
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+// Define OLED width and height
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+// Create an SSD1306 display object
+Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+// I2C Pins for ESP32
+#define OLED_SDA 20
+#define OLED_SCL 21
+
+
+
 void setup() {
   Serial.begin(115200);
-  // Seting up button testing initials
+  //.................................................................................................................................Seting up button logic initials
   for (int i = 0; i < NUM_BUTTONS; i++) {
     pinMode(buttonPins[i], INPUT_PULLUP);
     lastButtonState[i] = HIGH;
     buttonPressed[i] = false;
     longPressFired[i] = false;
   }
+
+  //...................................................................................................................................Start I2C communication
+  Wire.begin(OLED_SDA, OLED_SCL);
+  // Initialize OLED display
+  if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+      Serial.println(F("SSD1306 allocation failed"));
+      for (;;); // Halt execution
+  }
+  // Clear the display
+  oled.clearDisplay();
+  printLockScreen();
+
+
   delay(200);
 }
 
@@ -86,3 +116,27 @@ void printButton(int result){
     Serial.println(isLong ? "Long Press" : "Short Press");
   }
 }
+
+
+void printLockScreen(){
+  oled.setTextColor(SSD1306_WHITE);
+
+    // Big bold heading
+    oled.setTextSize(2);
+    oled.setCursor(10, 5);
+    oled.println("HELLO!");
+
+    // Smaller subheading
+    oled.setTextSize(1);
+    oled.setCursor(15, 28);
+    oled.println("Welcome to the");
+
+    oled.setCursor(15, 40);
+    oled.println("JUNGLE :)");
+
+    // Draw a small rectangle around text for style
+    oled.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, WHITE);
+
+    oled.display();
+}
+
