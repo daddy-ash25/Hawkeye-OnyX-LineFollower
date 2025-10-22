@@ -3,6 +3,37 @@
 const unsigned long longPressThreshold = 600;  // ms
 const unsigned long debounceDelay = 50;        // ms
 
+//..................................................................................................................Sensor definations and declarations
+#include <algorithm>
+
+#define s0 41
+#define s1 42
+#define s2 2
+#define s3 1
+#define sensorPin 19  // Analog input
+// --- Optimized multiplexer channel selector ---
+const uint8_t muxPins[4] = {s0, s1, s2, s3};
+int lastMuxChannel = -1; // remember the last selected channel
+
+
+
+//Lawaris
+const uint8_t sensorCount = 16;
+
+
+//Calibration Struct
+struct SensorCalibration {
+  float minCollector[sensorCount] = {0};     // Dark baseline (max ADC to start)
+  float maxCollector[sensorCount] = {4095};        // Bright baseline
+  float calibratedValues[sensorCount] = {0};    // Normalized values 0-1000
+  int midPoint = 2048;                           // Center threshold
+  float alpha = 0.1;                             // EMA smoothing factor
+  uint16_t calibrationDuration = 6000;
+};
+
+SensorCalibration sensorCal;
+
+
 // --- Struct for button data ---
 struct Button {
   int pin;
@@ -94,6 +125,11 @@ int8_t currentMode = -1;
 
 //........................................................................................................................................................SETUP
 void setup() {
+  pinMode(s0, OUTPUT);
+  pinMode(s1, OUTPUT);
+  pinMode(s2, OUTPUT);
+  pinMode(s3, OUTPUT);
+
   Serial.begin(115200);
 
   // --- Setup buttons ---
@@ -131,6 +167,7 @@ void setup() {
 void loop() {
   // int result = buttonCheck();
   // printButton(result);
+  printCalibratedSensorValues();
   if(currentMode == 0)
     pressControl(&emberLite);
   else if(currentMode == 1)
@@ -140,7 +177,7 @@ void loop() {
 }
 
 void pressControl(modeProfile* profile){
-  Serial.println("came to the mode select");
+  // Serial.println("came to the mode select");
   oled.clearDisplay();
   // oled.drawRect(0, 0, 128, 64, WHITE);
   oled.fillRect(0, 0, 128, 64, WHITE);
@@ -218,10 +255,10 @@ void pressControl(modeProfile* profile){
     profile->activeSelect++;
     profile->currentSelect++;
   }
-  else{
-    if(profile->activeSelect == 1){
+  else if(buttonStatus == 1){
+    if(profile->activeSelect == 0){
       if(profile->modeNo == 0);
-        speedModeStartPage()
+        speedModeStartPage();
     }
     else if(profile->activeSelect == 2)
       modeSelectPage();
@@ -230,6 +267,9 @@ void pressControl(modeProfile* profile){
     profile->activeSelect = 0;
     profile->currentSlide = 0;
     return;
+  }
+  else{
+    calibrationPage();
   }
 
   if(profile->currentSelect<0 && profile->activeSelect < 0){
@@ -400,4 +440,131 @@ void modeSelectPage(){
 
       delay(50);
   }
+}
+
+
+void sensorCalibrate(){
+  for (int i = 0; i < sensorCount; i++) {
+      int temp = sensorRead(i);  // Your raw sensor reading function
+
+      if (temp > sensorCal.midPoint) {
+        sensorCal.maxCollector[i] = (1 - sensorCal.alpha) * sensorCal.maxCollector[i] + sensorCal.alpha * temp;
+      } else {
+        sensorCal.minCollector[i] = (1 - sensorCal.alpha) * sensorCal.minCollector[i] + sensorCal.alpha * temp;
+      }
+    }
+}
+
+void calibrationPage(){
+  // Reinitialize min and max collectors to defaults for a fresh calibration
+  for (int i = 0; i < sensorCount; i++) {
+    sensorCal.maxCollector[i] = 4095;      // Bright baseline starts at 0
+    sensorCal.minCollector[i] = 0;   // Dark baseline starts at max ADC
+  }
+  auto PrintCurrentCalibrationStatus = [](float multiplyer){
+    oled.fillRoundRect(15, 10, 98, 44, 3, BLACK);
+    oled.drawRoundRect(16, 11, 96, 42, 3, WHITE);
+    oled.setTextColor(WHITE);              // Default text color
+    oled.setFont(&Font5x7FixedMono);
+    oled.setCursor(25, 23);
+    oled.print("Calibrating!!");
+    oled.drawLine(24, 25, 100, 25, WHITE);
+    oled.fillRoundRect(18, 39, 92, 12, 2, BLACK);
+    oled.drawRoundRect(18, 39, 92, 12, 2, WHITE);
+
+    //VISUALISING HOW MUCH CALIBRATION IS DONE
+    oled.fillRoundRect(20, 41, (int)(88 * multiplyer), 8, 1, WHITE);
+  };
+  unsigned long startTime = millis();
+  unsigned long lastPrintedTime = millis();
+    while ((millis() - startTime) < sensorCal.calibrationDuration){
+      sensorCalibrate();
+      if(millis()-lastPrintedTime > 50){
+        lastPrintedTime = millis();
+        PrintCurrentCalibrationStatus((float)(millis() - startTime) / sensorCal.calibrationDuration);
+        oled.display();
+      }
+    }
+  // --- Post-calibration correction for untouched sensors ---
+  float avgMax = 0, avgMin = 0;
+  int validMaxCount = 0, validMinCount = 0;
+
+  // Step 1: Calculate averages for valid entries
+  for (int i = 0; i < sensorCount; i++) {
+    if (sensorCal.maxCollector[i] < 4094) {  // skip untouched (still 4095)
+      avgMax += sensorCal.maxCollector[i];
+      validMaxCount++;
+    }
+    if (sensorCal.minCollector[i] > 1) {  // skip untouched (still 0)
+      avgMin += sensorCal.minCollector[i];
+      validMinCount++;
+    }
+  }
+
+  if (validMaxCount > 0) avgMax /= validMaxCount;
+  if (validMinCount > 0) avgMin /= validMinCount;
+
+  // Step 2: Replace untouched sensors with average
+  for (int i = 0; i < sensorCount; i++) {
+    if (sensorCal.maxCollector[i] >= 4094) {  // still default
+      sensorCal.maxCollector[i] = avgMax;
+    }
+    if (sensorCal.minCollector[i] <= 1) {  // still default
+      sensorCal.minCollector[i] = avgMin;
+    }
+  }
+
+
+
+  // Debug print
+  Serial.println("Calibration Done");
+  Serial.println("Min Values:");
+  for (int i = 0; i < sensorCount; i++) {
+    Serial.print((int)sensorCal.minCollector[i]); Serial.print("\t");
+  }
+  Serial.println("\nMax Values:");
+  for (int i = 0; i < sensorCount; i++) {
+    Serial.print((int)sensorCal.maxCollector[i]); Serial.print("\t");
+  }
+  Serial.println();
+  delay(200);
+}
+
+void speedModeStartPage(){
+  Serial.println("speedModeStartPage");
+}
+
+
+int sensorRead(int i) {
+  selectMuxChannel(i);        // Optimized multiplexer switching
+  return analogRead(sensorPin);
+}
+
+void selectMuxChannel(uint8_t channel) {
+  if (channel == lastMuxChannel) return;  // no change needed
+
+  uint8_t changedBits = lastMuxChannel ^ channel;  // find which bits changed
+
+  for (uint8_t bit = 0; bit < 4; bit++) {
+    if (changedBits & (1 << bit)) {
+      digitalWrite(muxPins[bit], (channel >> bit) & 1);
+    }
+  }
+
+  lastMuxChannel = channel;
+}
+
+void printCalibratedSensorValues() {
+  for (int i = 0; i < 16; i++) {
+    Serial.print(readCalibrated(i));
+    Serial.print("\t");
+  }
+  Serial.println();
+}
+
+int readCalibrated(int i){
+  int tempHolder = sensorRead(i);
+  tempHolder = map(tempHolder, sensorCal.minCollector[i], sensorCal.maxCollector[i], 0, 1000);
+  
+  return std::clamp(tempHolder, 0, 1000);  // Clamp the result
 }
