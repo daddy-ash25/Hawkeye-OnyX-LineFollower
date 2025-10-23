@@ -531,7 +531,44 @@ void calibrationPage(){
 }
 
 void speedModeStartPage(){
+  int8_t buttonStatus = -1;
+  while((buttonStatus != 1)&&(buttonStatus != 4)){
+    buttonStatus = buttonCheck();
+    oled.clearDisplay();
+    oled.drawRect(0, 0, 128, 64, WHITE);
+    printGraph();
+    oled.display();
+    delay(50);
+  }
   Serial.println("speedModeStartPage");
+}
+
+
+void printGraph(){
+  updateIRValues();
+  uint8_t individualHeight = 10;
+  uint8_t startYposition = 38;
+  uint8_t startXposition = 5;
+  // auto uint8_t Xposition = [](uint8_t input, uint8_t height){
+    
+  // }
+  for (uint8_t i = 0; i < sensorCount; i++) {
+    // uint8_t Xposition = getXposition(sensorCal.calibratedValues[i], individualHeight)
+    int8_t Yposition = individualHeight * (1 - (sensorCal.calibratedValues[i] / 1000.0f));
+    int8_t Xposition = (i > 7) ? (i - 1) * 8 : i * 8;
+    int8_t finalHeight = individualHeight - Yposition;
+    if(i==7)
+      Yposition -= (individualHeight/2)+2;
+    if(i==8)
+      Yposition += (individualHeight/2)+3;
+    oled.fillRoundRect(startXposition+Xposition, startYposition+Yposition, 6, finalHeight + 3, 2, WHITE); 
+  }
+}
+
+void updateIRValues(){
+  for (int i = 0; i < sensorCount; i++) {
+    sensorCal.calibratedValues[i] = readCalibrated(i);
+  }
 }
 
 
@@ -555,7 +592,7 @@ void selectMuxChannel(uint8_t channel) {
 }
 
 void printCalibratedSensorValues() {
-  for (int i = 0; i < 16; i++) {
+  for (int i = 0; i < sensorCount; i++) {
     Serial.print(readCalibrated(i));
     Serial.print("\t");
   }
