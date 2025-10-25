@@ -12,9 +12,8 @@ const unsigned long debounceDelay = 50;        // ms
 #define s3 1
 #define sensorPin 19  // Analog input
 // --- Optimized multiplexer channel selector ---
-const uint8_t muxPins[4] = {s0, s1, s2, s3};
-int lastMuxChannel = -1; // remember the last selected channel
-
+const uint8_t muxPins[4] = { s0, s1, s2, s3 };
+int lastMuxChannel = -1;  // remember the last selected channel
 
 
 //..................................................................................................................PWM Channel and Frequency Configuration
@@ -32,107 +31,7 @@ int lastMuxChannel = -1; // remember the last selected channel
 #define PWMB 40
 
 
-
-//Lawaris
-const uint8_t sensorCount = 16;
-
-
-//Calibration Struct
-struct SensorCalibration {
-  float minCollector[sensorCount] = {0};     // Dark baseline (max ADC to start)
-  float maxCollector[sensorCount] = {4095};        // Bright baseline
-  float calibratedValues[sensorCount] = {0};    // Normalized values 0-1000
-  int midPoint = 2048;                           // Center threshold
-  float alpha = 0.1;                             // EMA smoothing factor
-  uint16_t calibrationDuration = 6000;
-};
-
-struct DirectionLibrary {
-  unsigned long leftEdge[3] = {0};
-  unsigned long rightEdge[3] = {0};
-
-  bool leftHigh = false;
-  bool rightHigh = false;
-  bool timerStarted = false;
-
-  unsigned long leftTriggerTime = 0;
-  unsigned long rightTriggerTime = 0;
-
-  unsigned long caseThreshold = 50;       // ms
-  unsigned long decisionThreshold = 150;   // ms
-  uint8_t edgingCooldown = 750;
-  unsigned long lastEdged = 0;
-  unsigned long finalTimer = 0;
-  int directionFlag = 0;                   // 0=none, 1=left, 2=right
-  uint8_t currentPrediction = 0;
-};
-DirectionLibrary DL;  // single instance
-
-SensorCalibration sensorCal;
-
-
-// --- Struct for button data ---
-struct Button {
-  int pin;
-  bool lastState;
-  bool pressed;
-  bool longPressFired;
-  unsigned long pressStartTime;
-}; 
-
-struct modeProfile {
-  struct PIDandStats {
-    int P;
-    int D;
-    int previousError;
-    float Kp;
-    float Kd;
-    int maxSpeed;
-    int minSpeed;
-    float retention;
-    bool retentionAllowed;
-  } pidStats;
-
-  int8_t modeNo;
-  int8_t activeSelect;
-  int8_t noOfElements;
-  int8_t currentSlide;
-  int8_t currentSelect;
-  const char* elementNames[5]; // Store up to 5 element names
-};
-
-modeProfile emberIITB = {
-  {0, 0, 0, 0.1350, 0.0225, 550, 400, 0.55, true}, // PID and Stats
-  0, // modeNo
-  0, // ActiveSelect
-  4, // number of UI elements
-  0, // currentSlide
-  0, // currentSelect
-  {"START", "SETTING", "IITB", "C-VALUE"} // names of UI parameters
-};
-
-modeProfile onyxSpeed = {
-  {0, 0, 0, 0.125, 1.25, 1000, 800, 0.55, true}, // PID and Stats
-  1, // modeNo
-  0, // Active Select
-  4, // number of UI elements
-  0, // current slide
-  0, // currentSelect;
-  {"START", "SETTING", "SPEED", "C-VALUE"} // names of UI parameters
-};
-
-
-
-
-// --- Button array ---
-Button buttons[NUM_BUTTONS] = {
-  {9, HIGH, false, false, 0},
-  {10, HIGH, false, false, 0},
-  {11, HIGH, false, false, 0}
-};
-
-
-//............................................................................................................Display Variables and fonts
+//............................................................................................................Oled Display Variables and fonts
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -144,18 +43,153 @@ Button buttons[NUM_BUTTONS] = {
 #include <Fonts/FreeMono9pt7b.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
 
-
-
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 #define WHITE SSD1306_WHITE
 #define BLACK SSD1306_BLACK
 
-
 // I2C Pins for ESP32
 #define OLED_SDA 20
 #define OLED_SCL 21
+
+
+
+
+//.................................................................................................................Lawaris
+const uint8_t sensorCount = 16;
+int PositionMultiplyer[sensorCount - 1] = { -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7 };
+
+
+
+
+//Calibration Struct
+struct SensorCalibration {
+  float minCollector[sensorCount] = { 0 };      // Dark baseline (max ADC to start)
+  float maxCollector[sensorCount] = { 4095 };   // Bright baseline
+  float calibratedValues[sensorCount] = { 0 };  // Normalized values 0-1000
+  int midPoint = 2048;                          // Center threshold
+  float alpha = 0.1;                            // EMA smoothing factor
+  uint16_t calibrationDuration = 6000;
+};
+SensorCalibration sensorCal;
+
+
+
+struct DirectionLibrary {
+  unsigned long leftEdge[3] = { 0 };
+  unsigned long rightEdge[3] = { 0 };
+
+  bool leftHigh = false;
+  bool rightHigh = false;
+  bool timerStarted = false;
+
+  unsigned long leftTriggerTime = 0;
+  unsigned long rightTriggerTime = 0;
+
+  unsigned long caseThreshold = 50;       // ms
+  unsigned long decisionThreshold = 150;  // ms
+  uint8_t edgingCooldown = 750;
+  unsigned long lastEdged = 0;
+  unsigned long finalTimer = 0;
+  int directionFlag = 0;  // 0=none, 1=left, 2=right
+  uint8_t currentPrediction = 0;
+};
+DirectionLibrary DL;  // single instance
+
+
+
+// --- Struct for button data ---
+struct Button {
+  int pin;
+  bool lastState;
+  bool pressed;
+  bool longPressFired;
+  unsigned long pressStartTime;
+};
+// --- Button array ---
+Button buttons[NUM_BUTTONS] = {
+  { 9, HIGH, false, false, 0 },
+  { 10, HIGH, false, false, 0 },
+  { 11, HIGH, false, false, 0 }
+};
+
+
+
+struct modeProfile {
+  int maxSpeed;
+  int baseSpeed;
+
+  int8_t modeNo;
+  int8_t activeSelect;
+  int8_t noOfElements;
+  int8_t currentSlide;
+  int8_t currentSelect;
+  const char* elementNames[5];  // Store up to 5 element names
+};
+
+modeProfile emberIITB = {
+  550, 400,                                  // PID and Stats
+  0,                                         // modeNo
+  0,                                         // ActiveSelect
+  4,                                         // number of UI elements
+  0,                                         // currentSlide
+  0,                                         // currentSelect
+  { "START", "SETTING", "IITB", "C-VALUE" }  // names of UI parameters
+};
+
+modeProfile onyxSpeed = {
+  1000, 800,                                  // PID and Stats
+  1,                                          // modeNo
+  0,                                          // Active Select
+  4,                                          // number of UI elements
+  0,                                          // current slide
+  0,                                          // currentSelect;
+  { "START", "SETTING", "SPEED", "C-VALUE" }  // names of UI parameters
+};
+
+
+
+struct PID {
+  int P;
+  int D;
+  int I;
+  int error;
+  int previousError;
+  float Kp;
+  float Kd;
+  float Ki;
+  float retention;
+  bool retentionAllowed;
+  bool isOnWhite;
+  int edgeCase;
+  int totalWeightThreshold;
+};
+PID pid = {
+  0,
+  0,
+  0,
+  0,
+  0,
+  0.1350,
+  0.0225,
+  0.0,
+  0.055,
+  true,
+  true,
+  0,
+  2900
+};
+
+
+
+
+
+
+
+
+
+
 
 
 // Modes and Ui
@@ -167,12 +201,22 @@ bool isDryRunDone = false;
 
 
 
-//........................................................................................................................................................SETUP
+//.............................................................................................................................SETUP............................
 void setup() {
   pinMode(s0, OUTPUT);
   pinMode(s1, OUTPUT);
   pinMode(s2, OUTPUT);
   pinMode(s3, OUTPUT);
+
+  // Motor direction pins
+  pinMode(AIN1, OUTPUT);
+  pinMode(AIN2, OUTPUT);
+  pinMode(BIN1, OUTPUT);
+  pinMode(BIN2, OUTPUT);
+
+  ledcAttachChannel(PWMA, PWM_FREQ, PWM_RES, PWM_CHANNEL_E1);
+  ledcAttachChannel(PWMB, PWM_FREQ, PWM_RES, PWM_CHANNEL_E2);
+
 
   Serial.begin(115200);
 
@@ -185,7 +229,8 @@ void setup() {
   Wire.begin(OLED_SDA, OLED_SCL);
   if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
-    for (;;);
+    for (;;)
+      ;
   }
 
   oled.clearDisplay();
@@ -195,13 +240,13 @@ void setup() {
   // add your lock screen image or text here
   printLockScreen();
 
-  while(buttonCheck() == -1){
+  while (buttonCheck() == -1) {
     delay(50);
   }
 
   modeSelectPage();
 
-  
+
   delay(200);
 }
 
@@ -212,15 +257,15 @@ void loop() {
   // int result = buttonCheck();
   // printButton(result);
   printCalibratedSensorValues();
-  if(currentMode == 0)
+  if (currentMode == 0)
     pressControl(&emberIITB);
-  else if(currentMode == 1)
+  else if (currentMode == 1)
     pressControl(&onyxSpeed);
 
   delay(50);
 }
 
-void pressControl(modeProfile* profile){
+void pressControl(modeProfile* profile) {
   // Serial.println("came to the mode select");
   oled.clearDisplay();
   // oled.drawRect(0, 0, 128, 64, WHITE);
@@ -237,40 +282,39 @@ void pressControl(modeProfile* profile){
   oled.setTextColor(BLACK);
   oled.setTextSize(1);
 
-  dtostrf(profile->pidStats.Kp, 0, 4, buffer);  // Format Kp with 3 decimal places
+  dtostrf(pid.Kp, 0, 4, buffer);  // Format Kp with 3 decimal places
   oled.print("KP=");
   oled.print(buffer);
 
   oled.setCursor(89, 15);
-  dtostrf(profile->pidStats.Kd, 0, 4, buffer);  // Format Kd with 3 decimal places
+  dtostrf(pid.Kd, 0, 4, buffer);  // Format Kd with 3 decimal places
   oled.print("KD=");
   oled.print(buffer);
 
   oled.setCursor(89, 23);
-  dtostrf(profile->pidStats.Kp, 0, 4, buffer);  // Format Ki with 3 decimal places
+  dtostrf(pid.Ki, 0, 4, buffer);  // Format Ki with 3 decimal places
   oled.print("KI=");
   oled.print(buffer);
 
   oled.setCursor(89, 31);
   oled.print("BS=");
-  oled.print(profile->pidStats.minSpeed);
+  oled.print(profile->baseSpeed);
 
   oled.setCursor(89, 39);
   oled.print("MS=");
-  oled.print(profile->pidStats.maxSpeed);
-   
+  oled.print(profile->maxSpeed);
+
 
   oled.setTextColor(WHITE);
   oled.setFont(&FreeMonoBold9pt7b);
-  if(profile->currentSlide == 0){
+  if (profile->currentSlide == 0) {
     oled.setCursor(5, 17);
     oled.print(profile->elementNames[0]);
     oled.setCursor(5, 36);
     oled.print(profile->elementNames[1]);
     oled.setCursor(5, 55);
     oled.print(profile->elementNames[2]);
-  }
-  else {
+  } else {
     oled.setCursor(5, 17);
     oled.print(profile->elementNames[1]);
     oled.setCursor(5, 36);
@@ -279,9 +323,9 @@ void pressControl(modeProfile* profile){
     oled.print(profile->elementNames[3]);
   }
 
-  if(profile->currentSelect == 0)
+  if (profile->currentSelect == 0)
     oled.drawRoundRect(3, 4, 81, 18, 3, WHITE);
-  else if(profile->currentSelect == 1)
+  else if (profile->currentSelect == 1)
     oled.drawRoundRect(3, 23, 81, 18, 3, WHITE);
   else
     oled.drawRoundRect(3, 42, 81, 18, 3, WHITE);
@@ -290,50 +334,46 @@ void pressControl(modeProfile* profile){
 
 
   int8_t buttonStatus = buttonCheck();
-  if(buttonStatus == -1) return;
-  else if(buttonStatus == 0){
+  if (buttonStatus == -1) return;
+  else if (buttonStatus == 0) {
     profile->activeSelect--;
     profile->currentSelect--;
-  }
-  else if(buttonStatus == 2){
+  } else if (buttonStatus == 2) {
     profile->activeSelect++;
     profile->currentSelect++;
-  }
-  else if(buttonStatus == 1){
-    if(profile->activeSelect == 0){
-      if(profile->modeNo == 0)  
+  } else if (buttonStatus == 1) {
+    if (profile->activeSelect == 0) {
+      if (profile->modeNo == 0)
         emberIITBmodeStartPage();
-      else if(profile->modeNo == 1)
+      else if (profile->modeNo == 1)
         speedModeStartPage();
-    }
-    else if(profile->activeSelect == 2)
+    } else if (profile->activeSelect == 2)
       modeSelectPage();
 
     profile->currentSelect = 0;
     profile->activeSelect = 0;
     profile->currentSlide = 0;
     return;
-  }
-  else{
+  } else {
     calibrationPage();
   }
 
-  if(profile->currentSelect<0 && profile->activeSelect < 0){
+  if (profile->currentSelect < 0 && profile->activeSelect < 0) {
     profile->currentSelect = 2;
-    profile->activeSelect = profile->noOfElements-1;
-    profile->currentSlide = profile->noOfElements-3;
+    profile->activeSelect = profile->noOfElements - 1;
+    profile->currentSlide = profile->noOfElements - 3;
   }
-  if(profile->currentSelect>2 && profile->activeSelect > (profile->noOfElements-1)){
+  if (profile->currentSelect > 2 && profile->activeSelect > (profile->noOfElements - 1)) {
     profile->currentSelect = 0;
     profile->activeSelect = 0;
     profile->currentSlide = 0;
   }
-  if(profile->currentSelect<0){
+  if (profile->currentSelect < 0) {
     profile->currentSelect = 0;
     // profile->activeSelect--;
     profile->currentSlide--;
   }
-  if(profile->currentSelect>2){
+  if (profile->currentSelect > 2) {
     profile->currentSelect = 2;
     // profile->activeSelect++;
     profile->currentSlide++;
@@ -342,8 +382,6 @@ void pressControl(modeProfile* profile){
     profile->currentSlide = 0;
   else if (profile->currentSlide > (profile->noOfElements - 3))
     profile->currentSlide = max(0, profile->noOfElements - 3);
-
-
 }
 
 
@@ -368,7 +406,7 @@ int buttonCheck() {
       unsigned long heldTime = millis() - buttons[i].pressStartTime;
       if (heldTime >= longPressThreshold) {
         buttons[i].longPressFired = true;
-        return 3 + i; // long press event immediately
+        return 3 + i;  // long press event immediately
       }
     }
 
@@ -380,14 +418,14 @@ int buttonCheck() {
         buttons[i].pressed = false;
 
         if (!buttons[i].longPressFired && pressDuration < longPressThreshold)
-          return i; // short press
+          return i;  // short press
       }
     }
 
     buttons[i].lastState = currentState;
   }
 
-  return -1; // no event
+  return -1;  // no event
 }
 
 
@@ -427,16 +465,16 @@ void printLockScreen() {
 
 
 
-void modeSelectPage(){
+void modeSelectPage() {
   // Mode select layout design
   auto displayLayout = []() {
-    oled.clearDisplay();                   // Clear screen before drawing
+    oled.clearDisplay();  // Clear screen before drawing
 
     // Outline
     oled.drawRect(0, 0, 128, 64, WHITE);
     oled.drawRoundRect(0, 0, 128, 64, 4, WHITE);
 
-    oled.setTextColor(WHITE);              // Default text color
+    oled.setTextColor(WHITE);  // Default text color
     oled.setFont(&Font5x7FixedMono);
     oled.setCursor(25, 10);
     oled.print("Select Mode :");
@@ -463,54 +501,51 @@ void modeSelectPage(){
     oled.setCursor(95, 56);
     oled.print("TBM");
 
-    oled.display();// Update screen
-  
+    oled.display();  // Update screen
   };
 
   // Setting up the initial mode
   while (true) {
-      displayLayout();             // Call the lambda
+    displayLayout();  // Call the lambda
 
-      uint8_t temp = buttonCheck();
-      if (temp != -1) {
-          if (temp == 0 || temp == 3) {
-              currentMode = 0;
-              break;
-          }
-          else if (temp == 1 || temp == 4) {
-              currentMode = 1;
-              break;
-          }
-          else continue; 
-      }
+    uint8_t temp = buttonCheck();
+    if (temp != -1) {
+      if (temp == 0 || temp == 3) {
+        currentMode = 0;
+        break;
+      } else if (temp == 1 || temp == 4) {
+        currentMode = 1;
+        break;
+      } else continue;
+    }
 
-      delay(50);
+    delay(50);
   }
 }
 
 
-void sensorCalibrate(){
+void sensorCalibrate() {
   for (int i = 0; i < sensorCount; i++) {
-      int temp = sensorRead(i);  // Your raw sensor reading function
+    int temp = sensorRead(i);  // Your raw sensor reading function
 
-      if (temp > sensorCal.midPoint) {
-        sensorCal.maxCollector[i] = (1 - sensorCal.alpha) * sensorCal.maxCollector[i] + sensorCal.alpha * temp;
-      } else {
-        sensorCal.minCollector[i] = (1 - sensorCal.alpha) * sensorCal.minCollector[i] + sensorCal.alpha * temp;
-      }
+    if (temp > sensorCal.midPoint) {
+      sensorCal.maxCollector[i] = (1 - sensorCal.alpha) * sensorCal.maxCollector[i] + sensorCal.alpha * temp;
+    } else {
+      sensorCal.minCollector[i] = (1 - sensorCal.alpha) * sensorCal.minCollector[i] + sensorCal.alpha * temp;
     }
+  }
 }
 
-void calibrationPage(){
+void calibrationPage() {
   // Reinitialize min and max collectors to defaults for a fresh calibration
   for (int i = 0; i < sensorCount; i++) {
-    sensorCal.maxCollector[i] = 4095;      // Bright baseline starts at 0
-    sensorCal.minCollector[i] = 0;   // Dark baseline starts at max ADC
+    sensorCal.maxCollector[i] = 4095;  // Bright baseline starts at 0
+    sensorCal.minCollector[i] = 0;     // Dark baseline starts at max ADC
   }
-  auto PrintCurrentCalibrationStatus = [](float multiplyer){
+  auto PrintCurrentCalibrationStatus = [](float multiplyer) {
     oled.fillRoundRect(15, 10, 98, 44, 3, BLACK);
     oled.drawRoundRect(16, 11, 96, 42, 3, WHITE);
-    oled.setTextColor(WHITE);              // Default text color
+    oled.setTextColor(WHITE);  // Default text color
     oled.setFont(&Font5x7FixedMono);
     oled.setCursor(25, 23);
     oled.print("Calibrating!!");
@@ -523,14 +558,14 @@ void calibrationPage(){
   };
   unsigned long startTime = millis();
   unsigned long lastPrintedTime = millis();
-    while ((millis() - startTime) < sensorCal.calibrationDuration){
-      sensorCalibrate();
-      if(millis()-lastPrintedTime > 50){
-        lastPrintedTime = millis();
-        PrintCurrentCalibrationStatus((float)(millis() - startTime) / sensorCal.calibrationDuration);
-        oled.display();
-      }
+  while ((millis() - startTime) < sensorCal.calibrationDuration) {
+    sensorCalibrate();
+    if (millis() - lastPrintedTime > 50) {
+      lastPrintedTime = millis();
+      PrintCurrentCalibrationStatus((float)(millis() - startTime) / sensorCal.calibrationDuration);
+      oled.display();
     }
+  }
   // --- Post-calibration correction for untouched sensors ---
   float avgMax = 0, avgMin = 0;
   int validMaxCount = 0, validMinCount = 0;
@@ -566,19 +601,21 @@ void calibrationPage(){
   Serial.println("Calibration Done");
   Serial.println("Min Values:");
   for (int i = 0; i < sensorCount; i++) {
-    Serial.print((int)sensorCal.minCollector[i]); Serial.print("\t");
+    Serial.print((int)sensorCal.minCollector[i]);
+    Serial.print("\t");
   }
   Serial.println("\nMax Values:");
   for (int i = 0; i < sensorCount; i++) {
-    Serial.print((int)sensorCal.maxCollector[i]); Serial.print("\t");
+    Serial.print((int)sensorCal.maxCollector[i]);
+    Serial.print("\t");
   }
   Serial.println();
   delay(200);
 }
 
-void speedModeStartPage(){
+void speedModeStartPage() {
   int8_t buttonStatus = -1;
-  while((buttonStatus != 1)&&(buttonStatus != 4)){
+  while ((buttonStatus != 1) && (buttonStatus != 4)) {
     buttonStatus = buttonCheck();
     oled.clearDisplay();
     oled.drawRect(0, 0, 128, 64, WHITE);
@@ -592,24 +629,57 @@ void speedModeStartPage(){
     oled.display();
     delay(50);
   }
-  if(buttonStatus == 1){
-    while(buttonStatus != 4){
-        updateIRValues();
-        
-        runForword(&emberIITB);
+  if (buttonStatus == 1) {
+    while (buttonStatus != 4) {
+      updateIRValues();
+      findError();
+      runForword(&emberIITB);
       buttonStatus = buttonCheck();
     }
   }
   // Serial.println("speedModeStartPage");
 }
 
-runForword(modeProfile* profile)
+void runForword(modeProfile* profile) {
+  P = Kp*error;
+  
+  // delay(100);
+}
+
+void findError() {
+  int totalWeight = 0;
+  int collectiveWeight = 0;
+  pid.isOnWhite = false;
+  // pid.error = 0;
+  collectiveWeight += PositionMultiplyer[7] * sensorCal.calibratedValues[7];
+  totalWeight += sensorCal.calibratedValues[7];
+
+  for (int i = 0; i < 7; i++) {
+    collectiveWeight += (PositionMultiplyer[6 - i] * sensorCal.calibratedValues[6 - i]) + (PositionMultiplyer[8 + i] * sensorCal.calibratedValues[9 + i]);
+    totalWeight += sensorCal.calibratedValues[6 - i] + sensorCal.calibratedValues[9 + i];
+    if (totalWeight > pid.totalWeightThreshold)
+      break;
+  }
+  if (sensorCal.calibratedValues[0] > 600)
+    pid.edgeCase = -7000;
+  else if (sensorCal.calibratedValues[sensorCount-1] > 600)
+    pid.edgeCase = 7000;
+
+  if (totalWeight < 400) {
+    pid.error = pid.edgeCase;
+    pid.isOnWhite = true; 
+  }
+  else
+    pid.error = (collectiveWeight*1000)/totalWeight;
+  // Serial.println(pid.error);
+  // Serial.println(pid.isOnWhite);
+}
 
 
-void emberIITBmodeStartPage(){
+void emberIITBmodeStartPage() {
   Serial.println("emberIITBmodeStartPage");
   int8_t buttonStatus = -1;
-  while((buttonStatus != 0)&&(buttonStatus != 4)&&(buttonStatus != 2)){
+  while ((buttonStatus != 0) && (buttonStatus != 4) && (buttonStatus != 2)) {
     buttonStatus = buttonCheck();
     oled.clearDisplay();
     oled.drawRect(0, 0, 128, 64, WHITE);
@@ -617,40 +687,40 @@ void emberIITBmodeStartPage(){
     oled.display();
     delay(50);
   }
-  if(buttonStatus == 0){
-    while(buttonStatus != 4){
+  if (buttonStatus == 0) {
+    while (buttonStatus != 4) {
       updateIRValues();
-      if(millis()-DL.lastEdged>DL.decisionThreshold)
+      if (millis() - DL.lastEdged > DL.decisionThreshold)
         edging();
       buttonStatus = buttonCheck();
     }
-  } 
+  }
 }
 
 
 
-void printGraph(){
+void printGraph() {
   updateIRValues();
   uint8_t individualHeight = 10;
   uint8_t startYposition = 38;
   uint8_t startXposition = 5;
   // auto uint8_t Xposition = [](uint8_t input, uint8_t height){
-    
+
   // }
   for (uint8_t i = 0; i < sensorCount; i++) {
     // uint8_t Xposition = getXposition(sensorCal.calibratedValues[i], individualHeight)
     int8_t Yposition = individualHeight * (1 - (sensorCal.calibratedValues[i] / 1000.0f));
     int8_t Xposition = (i > 7) ? (i - 1) * 8 : i * 8;
     int8_t finalHeight = individualHeight - Yposition;
-    if(i==7)
-      Yposition -= (individualHeight/2)+2;
-    if(i==8)
-      Yposition += (individualHeight/2)+3;
-    oled.fillRoundRect(startXposition+Xposition, startYposition+Yposition, 6, finalHeight + 3, 2, WHITE); 
+    if (i == 7)
+      Yposition -= (individualHeight / 2) + 2;
+    if (i == 8)
+      Yposition += (individualHeight / 2) + 3;
+    oled.fillRoundRect(startXposition + Xposition, startYposition + Yposition, 6, finalHeight + 3, 2, WHITE);
   }
 }
 
-void updateIRValues(){
+void updateIRValues() {
   for (int i = 0; i < sensorCount; i++) {
     sensorCal.calibratedValues[i] = readCalibrated(i);
   }
@@ -658,7 +728,7 @@ void updateIRValues(){
 
 
 int sensorRead(int i) {
-  selectMuxChannel(i);        // Optimized multiplexer switching
+  selectMuxChannel(i);  // Optimized multiplexer switching
   return analogRead(sensorPin);
 }
 
@@ -684,39 +754,39 @@ void printCalibratedSensorValues() {
   Serial.println();
 }
 
-int readCalibrated(int i){
+int readCalibrated(int i) {
   int tempHolder = sensorRead(i);
   tempHolder = map(tempHolder, sensorCal.minCollector[i], sensorCal.maxCollector[i], 0, 1000);
-  
+
   return std::clamp(tempHolder, 0, 1000);  // Clamp the result
 }
 
 
 void edging() {
   unsigned long currentTime = millis();
-  
-    // --- 1. Update timestamps when edge sensors go above 800 ---
-    for (int i = 0; i < 3; i++) {
-      if (sensorCal.calibratedValues[i] > 800)
-        DL.leftEdge[i] = currentTime;
 
-      if (sensorCal.calibratedValues[13 + i] > 800)
-        DL.rightEdge[i] = currentTime;
+  // --- 1. Update timestamps when edge sensors go above 800 ---
+  for (int i = 0; i < 3; i++) {
+    if (sensorCal.calibratedValues[i] > 800)
+      DL.leftEdge[i] = currentTime;
+
+    if (sensorCal.calibratedValues[13 + i] > 800)
+      DL.rightEdge[i] = currentTime;
+  }
+
+  // --- 2. Calculate max time difference for each side ---
+  auto getMin = [](unsigned long arr[3]) {
+    unsigned long minT = arr[0];
+    for (int i = 1; i < 3; i++) {
+      if (arr[i] < minT) minT = arr[i];
     }
+    return minT;
+  };
 
-    // --- 2. Calculate max time difference for each side ---
-    auto getMin = [](unsigned long arr[3]) {
-      unsigned long minT = arr[0];
-      for (int i = 1; i < 3; i++) {
-        if (arr[i] < minT) minT = arr[i];
-      }
-      return minT;
-    };
+  unsigned long leftMin = getMin(DL.leftEdge);
+  unsigned long rightMin = getMin(DL.rightEdge);
 
-    unsigned long leftMin = getMin(DL.leftEdge);
-    unsigned long rightMin = getMin(DL.rightEdge);
-
-  if(!DL.timerStarted){
+  if (!DL.timerStarted) {
     // --- 3. Determine if edges are "High" ---
     if (currentTime - leftMin < DL.caseThreshold) {
       // if (!DL.leftHigh) DL.leftTriggerTime = currentTime;
@@ -738,12 +808,12 @@ void edging() {
   }
 
   // --- 4. Make decision (non-blocking) ---
-  else{
-    DL.directionFlag = 0; // default: no decision yet
-    if(currentTime - DL.finalTimer < DL.decisionThreshold){
-      
-      if(DL.currentPrediction == 1){
-        if(currentTime - rightMin < DL.caseThreshold){
+  else {
+    DL.directionFlag = 0;  // default: no decision yet
+    if (currentTime - DL.finalTimer < DL.decisionThreshold) {
+
+      if (DL.currentPrediction == 1) {
+        if (currentTime - rightMin < DL.caseThreshold) {
           DL.currentPrediction = 0;
           DL.timerStarted = false;
           DL.rightHigh = false;
@@ -753,8 +823,8 @@ void edging() {
           DL.lastEdged = currentTime;
         }
       }
-      if(DL.currentPrediction == 3){
-        if(currentTime - leftMin < DL.caseThreshold){
+      if (DL.currentPrediction == 3) {
+        if (currentTime - leftMin < DL.caseThreshold) {
           DL.currentPrediction = 0;
           DL.timerStarted = false;
           DL.rightHigh = false;
@@ -764,8 +834,7 @@ void edging() {
           DL.lastEdged = currentTime;
         }
       }
-    }
-    else{
+    } else {
       DL.directionFlag = DL.currentPrediction;
       DL.currentPrediction = 0;
       DL.timerStarted = false;
