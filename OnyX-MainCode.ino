@@ -31,6 +31,27 @@ struct SensorCalibration {
   uint16_t calibrationDuration = 6000;
 };
 
+struct DirectionLibrary {
+  unsigned long leftEdge[3] = {0};
+  unsigned long rightEdge[3] = {0};
+
+  bool leftHigh = false;
+  bool rightHigh = false;
+  bool timerStarted = false;
+
+  unsigned long leftTriggerTime = 0;
+  unsigned long rightTriggerTime = 0;
+
+  unsigned long caseThreshold = 50;       // ms
+  unsigned long decisionThreshold = 150;   // ms
+  uint8_t edgingCooldown = 750;
+  unsigned long lastEdged = 0;
+  unsigned long finalTimer = 0;
+  int directionFlag = 0;                   // 0=none, 1=left, 2=right
+  uint8_t currentPrediction = 0;
+};
+DirectionLibrary DL;  // single instance
+
 SensorCalibration sensorCal;
 
 
@@ -540,8 +561,20 @@ void speedModeStartPage(){
     oled.display();
     delay(50);
   }
-  Serial.println("speedModeStartPage");
+  if(buttonStatus == 1){
+    while(buttonStatus != 4){
+      updateIRValues();
+      if(millis()-DL.lastEdged>DL.decisionThreshold)
+        edging();
+      buttonStatus = buttonCheck();
+    }
+  }
+  // Serial.println("speedModeStartPage");
 }
+
+// void edging(){
+  
+// }
 
 
 void printGraph(){
@@ -604,4 +637,91 @@ int readCalibrated(int i){
   tempHolder = map(tempHolder, sensorCal.minCollector[i], sensorCal.maxCollector[i], 0, 1000);
   
   return std::clamp(tempHolder, 0, 1000);  // Clamp the result
+}
+
+
+void edging() {
+  unsigned long currentTime = millis();
+  
+    // --- 1. Update timestamps when edge sensors go above 800 ---
+    for (int i = 0; i < 3; i++) {
+      if (sensorCal.calibratedValues[i] > 800)
+        DL.leftEdge[i] = currentTime;
+
+      if (sensorCal.calibratedValues[13 + i] > 800)
+        DL.rightEdge[i] = currentTime;
+    }
+
+    // --- 2. Calculate max time difference for each side ---
+    auto getMin = [](unsigned long arr[3]) {
+      unsigned long minT = arr[0];
+      for (int i = 1; i < 3; i++) {
+        if (arr[i] < minT) minT = arr[i];
+      }
+      return minT;
+    };
+
+    unsigned long leftMin = getMin(DL.leftEdge);
+    unsigned long rightMin = getMin(DL.rightEdge);
+
+  if(!DL.timerStarted){
+    // --- 3. Determine if edges are "High" ---
+    if (currentTime - leftMin < DL.caseThreshold) {
+      // if (!DL.leftHigh) DL.leftTriggerTime = currentTime;
+      DL.leftHigh = true;
+      DL.currentPrediction = 1;
+      DL.finalTimer = currentTime;
+      DL.timerStarted = true;
+      Serial.println("LEFT High");
+    }
+
+    if (currentTime - rightMin < DL.caseThreshold) {
+      // if (!DL.rightHigh) DL.rightTriggerTime = currentTime;
+      DL.rightHigh = true;
+      DL.currentPrediction = 3;
+      DL.finalTimer = currentTime;
+      DL.timerStarted = true;
+      Serial.println("RIGHT High");
+    }
+  }
+
+  // --- 4. Make decision (non-blocking) ---
+  else{
+    DL.directionFlag = 0; // default: no decision yet
+    if(currentTime - DL.finalTimer < DL.decisionThreshold){
+      
+      if(DL.currentPrediction == 1){
+        if(currentTime - rightMin < DL.caseThreshold){
+          DL.currentPrediction = 0;
+          DL.timerStarted = false;
+          DL.rightHigh = false;
+          DL.leftHigh = false;
+          DL.directionFlag = 2;
+          Serial.println(DL.directionFlag);
+          DL.lastEdged = currentTime;
+        }
+      }
+      if(DL.currentPrediction == 3){
+        if(currentTime - leftMin < DL.caseThreshold){
+          DL.currentPrediction = 0;
+          DL.timerStarted = false;
+          DL.rightHigh = false;
+          DL.leftHigh = false;
+          DL.directionFlag = 2;
+          Serial.println(DL.directionFlag);
+          DL.lastEdged = currentTime;
+        }
+      }
+    }
+    else{
+      DL.directionFlag = DL.currentPrediction;
+      DL.currentPrediction = 0;
+      DL.timerStarted = false;
+      DL.rightHigh = false;
+      DL.leftHigh = false;
+      DL.lastEdged = currentTime;
+      Serial.println(DL.directionFlag);
+    }
+  }
+
 }
