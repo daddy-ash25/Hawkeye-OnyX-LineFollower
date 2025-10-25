@@ -17,6 +17,22 @@ int lastMuxChannel = -1; // remember the last selected channel
 
 
 
+//..................................................................................................................PWM Channel and Frequency Configuration
+#define PWM_FREQ 5000
+#define PWM_RES 10
+#define PWM_CHANNEL_E1 7
+#define PWM_CHANNEL_E2 0
+// --- Motor Pin Definitions ---
+#define AIN1 45
+#define AIN2 48
+#define PWMA 47
+
+#define BIN1 38
+#define BIN2 39
+#define PWMB 40
+
+
+
 //Lawaris
 const uint8_t sensorCount = 16;
 
@@ -66,6 +82,9 @@ struct Button {
 
 struct modeProfile {
   struct PIDandStats {
+    int P;
+    int D;
+    int previousError;
     float Kp;
     float Kd;
     int maxSpeed;
@@ -82,18 +101,18 @@ struct modeProfile {
   const char* elementNames[5]; // Store up to 5 element names
 };
 
-modeProfile emberLite = {
-  {0.125, 1.25, 900, 500, 0.55, true}, // PID and Stats
+modeProfile emberIITB = {
+  {0, 0, 0, 0.1350, 0.0225, 550, 400, 0.55, true}, // PID and Stats
   0, // modeNo
   0, // ActiveSelect
   4, // number of UI elements
   0, // currentSlide
   0, // currentSelect
-  {"START", "SETTING", "LITE", "C-VALUE"} // names of UI parameters
+  {"START", "SETTING", "IITB", "C-VALUE"} // names of UI parameters
 };
 
 modeProfile onyxSpeed = {
-  {0.125, 1.25, 1000, 800, 0.55, true}, // PID and Stats
+  {0, 0, 0, 0.125, 1.25, 1000, 800, 0.55, true}, // PID and Stats
   1, // modeNo
   0, // Active Select
   4, // number of UI elements
@@ -143,6 +162,10 @@ Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 int8_t currentMode = -1;
 
 
+//dryrun parameters
+bool isDryRunDone = false;
+
+
 
 //........................................................................................................................................................SETUP
 void setup() {
@@ -190,7 +213,7 @@ void loop() {
   // printButton(result);
   printCalibratedSensorValues();
   if(currentMode == 0)
-    pressControl(&emberLite);
+    pressControl(&emberIITB);
   else if(currentMode == 1)
     pressControl(&onyxSpeed);
 
@@ -278,7 +301,9 @@ void pressControl(modeProfile* profile){
   }
   else if(buttonStatus == 1){
     if(profile->activeSelect == 0){
-      if(profile->modeNo == 0);
+      if(profile->modeNo == 0)  
+        emberIITBmodeStartPage();
+      else if(profile->modeNo == 1)
         speedModeStartPage();
     }
     else if(profile->activeSelect == 2)
@@ -432,7 +457,7 @@ void modeSelectPage(){
     // Text inside boxes (black)
     oled.setTextColor(BLACK);
     oled.setCursor(10, 56);
-    oled.print("Lite");
+    oled.print("iitb");
     oled.setCursor(49, 56);
     oled.print("Speed");
     oled.setCursor(95, 56);
@@ -557,24 +582,51 @@ void speedModeStartPage(){
     buttonStatus = buttonCheck();
     oled.clearDisplay();
     oled.drawRect(0, 0, 128, 64, WHITE);
+    oled.drawRoundRect(42, 8, 44, 15, 3, WHITE);
+    oled.drawRoundRect(41, 7, 46, 17, 3, WHITE);
+    oled.setTextColor(WHITE);
+    oled.setCursor(50, 18);
+    oled.setFont(&Font5x7Fixed);
+    oled.print("START");
     printGraph();
     oled.display();
     delay(50);
   }
   if(buttonStatus == 1){
     while(buttonStatus != 4){
-      updateIRValues();
-      if(millis()-DL.lastEdged>DL.decisionThreshold)
-        edging();
+        updateIRValues();
+        
+        runForword(&emberIITB);
       buttonStatus = buttonCheck();
     }
   }
   // Serial.println("speedModeStartPage");
 }
 
-// void edging(){
-  
-// }
+runForword(modeProfile* profile)
+
+
+void emberIITBmodeStartPage(){
+  Serial.println("emberIITBmodeStartPage");
+  int8_t buttonStatus = -1;
+  while((buttonStatus != 0)&&(buttonStatus != 4)&&(buttonStatus != 2)){
+    buttonStatus = buttonCheck();
+    oled.clearDisplay();
+    oled.drawRect(0, 0, 128, 64, WHITE);
+    printGraph();
+    oled.display();
+    delay(50);
+  }
+  if(buttonStatus == 0){
+    while(buttonStatus != 4){
+      updateIRValues();
+      if(millis()-DL.lastEdged>DL.decisionThreshold)
+        edging();
+      buttonStatus = buttonCheck();
+    }
+  } 
+}
+
 
 
 void printGraph(){
@@ -723,5 +775,4 @@ void edging() {
       Serial.println(DL.directionFlag);
     }
   }
-
 }
